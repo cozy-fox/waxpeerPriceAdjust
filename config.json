@@ -1,0 +1,21 @@
+{
+    "pricempire_api_key": "7443d393-ca4c-473a-8be8-1a25416b262d",
+    "waxpeer_api_key": "d84f4dac340cbf29f9e64d3d9a9137da54cca970faa14a25438c2903fbb8b5b6",
+    "default_delimiter": [1.08,1.5],
+    "detailed_delimiter":[
+        {
+            "range":[0,20],
+            "delimiter":[1.15,1.4]
+        },{
+            "range":[20,200],
+            "delimiter":[1.1,1.5]
+        },{
+            "range":[200,1500],
+            "delimiter":[1.05,1.2]
+        }
+    ],
+    "max_items_per_listing": -1,
+    "seconds_between_wax_listings_updates": 60,
+    "hours_between_pricempire_price_update": 6.0,
+    "hours_between_wax_new_listing": 6.0
+}
