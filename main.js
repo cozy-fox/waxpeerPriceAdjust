@@ -15,13 +15,14 @@ var maxItemsPerListing = -1;
 var secondsBetweenWaxListingsUpdates = 60;
 var hoursBetweenPriceMPIREPriceUpdate = 6.0;
 var hoursBetweenWaxNewListing = 6.0;
-var secondsBetweenWaxRequest=5.0;
-var waxUpdateLimit=50;
+var waxUpdateLimit = 50;
 var detailedDelimiter = [];
-
+var showResultDetail = false
 var priceMPIREItemData = {};
 var myListedItems = [];
 var waxCache = {};
+var delayCountForUpdate = 0;
+var delayCountForList = 0;
 var lastWaxListingUpdate = Date.now();
 var lastPriceMPIREUpdate = Date.now();
 var lastWaxNewListing = Date.now();
@@ -45,13 +46,13 @@ async function loadConfig() {
   priceLowerDelimiter = config.default_delimiter[0];
   priceUpperDelimiter = config.default_delimiter[1];
   maxItemsPerListing = config.max_items_per_listing;
-  secondsBetweenWaxRequest=config.seconds_between_wax_request;
+  secondsBetweenWaxRequest = config.seconds_between_wax_request;
   detailedDelimiter = config.detailed_delimiter;
-  waxUpdateLimit=config.wax_update_limit;
+  waxUpdateLimit = config.wax_update_limit;
   secondsBetweenWaxListingsUpdates = config.seconds_between_wax_listings_updates;
   hoursBetweenPriceMPIREPriceUpdate = config.hours_between_pricempire_price_update;
   hoursBetweenWaxNewListing = config.hours_between_wax_new_listing;
-
+  showResultDetail = config.show_result_detail;
   lastWaxNewListing = Date.now() - (hoursBetweenWaxNewListing * 60 * 60 * 1000 + 1);
   lastPriceMPIREUpdate = Date.now() - (hoursBetweenPriceMPIREPriceUpdate * 60 * 60 * 1000 + 1);
   lastWaxListingUpdate = Date.now() - (secondsBetweenWaxListingsUpdates * 1000 + 1);
@@ -213,33 +214,49 @@ async function listMyItems() {
   }
 
   console.log("  Calculating prices...");
-  for (const item of data.items) {
-    // console.log("item:",item);
+  const promises = data.items && data.items.map(async item => {
     var price = await getWaxPriceFor(item) * 1000;
     items.push({
       "item_id": item.item_id,
       "price": price,
     });
-  }
+  })
+  await Promise.all(promises);
 
-  if (maxItemsPerListing > 0 && items.length >= maxItemsPerListing) {
-    items = items.slice(0, maxItemsPerListing);
-  }
-
-  // print a message
   console.log("  Making listings...");
 
-  res = await axios.post(
-    WAX_BASE_URL + "/list-items-steam",
-    {
-      "items": items,
-    }, {
-    params: {
-      api: waxPeerApiKey,
-      game: "csgo",
-    },
+  var batches = [];
+  var full = Math.floor(items.length / maxItemsPerListing);
+  var rem = (items.length) % maxItemsPerListing;
 
-  });
+  for (var i = 0; i < full; i++) {
+    batches.push(items.slice(i * maxItemsPerListing, (i + 1) * maxItemsPerListing));
+  }
+
+  if (rem > 0) {
+    batches.push(items.slice(full * maxItemsPerListing),);
+  }
+  for (var idx = 0; idx < batches.length; idx++) {
+    res = await axios.post(
+      WAX_BASE_URL + "/list-items-steam",
+      {
+        "items": batches[idx],
+      }, {
+      params: {
+        api: waxPeerApiKey,
+        game: "csgo",
+      },
+    });
+    delayCountForList++;
+    if(delayCountForList==2){
+      delayCountForList=0;
+      var setTime = Date.now()
+        while (true) {
+          if (Date.now() - setTime > 120 * 1000) break;
+        }
+    }
+  }
+
   if (res.status !== 200) { error(); return; }
   else if (res.data.success === false) { console.log(res.data.msg); }
   else if (res.data.failed.length > 0) {
@@ -257,16 +274,21 @@ async function updateMyItems() {
   if ((Date.now() - lastWaxListingUpdate) < secondsBetweenWaxListingsUpdates * 1000) {
     return;
   }
+  try {
+    var res = await axios.get(
+      WAX_BASE_URL + "/list-items-steam",
+      {
+        params: {
+          api: waxPeerApiKey,
+          game: "csgo",
+        },
+      }
+    );
+  } catch (error) {
+    console.log(error)
+  }
 
-  var res = await axios.get(
-    WAX_BASE_URL + "/list-items-steam",
-    {
-      params: {
-        api: waxPeerApiKey,
-        game: "csgo",
-      },
-    }
-  );
+  lastWaxListingUpdate = Date.now();
   // check if the request was successful
   if (res.status !== 200) {
     error();
@@ -274,65 +296,61 @@ async function updateMyItems() {
   }
   // parse the response data
   myListedItems = res.data.items;
-  for (item of myListedItems) {
-    res = await axios.get(
-      WAX_BASE_URL + "/search-items-by-name",
-      {
-        params: {
-          api: waxPeerApiKey,
-          game: "csgo",
-          names: item.name,
-        },
-      }
-    );
-    // if the request was successful,
-    // add the wax price to the wax cache
-    if (res.status === 200) {
-      waxCache[item.name] = res.data.items;
-    }
-  }
-  // update the last wax listing update time
-  lastWaxListingUpdate = Date.now();
-  // create a list of updates
+  //console.log(res.data.items.length);
   var updates = [];
-  if (myListedItems.length > 0) {
-    for (item of myListedItems) {
-      var itemName = item.name;
-      var returnedItems = waxCache[item.name];
-      var listedItemPriceInDollars = item.price / 1000.0;
-      var leastWaxPrice = await findLeastWaxPrice(returnedItems);
-      if (leastWaxPrice < listedItemPriceInDollars) {
-        var buffLowerDelimiter = await getLowerDelimiter(itemName);
-        var buffUpperDelimiter = await getUpperDelimiter(itemName);
-        if (leastWaxPrice < buffLowerDelimiter) {
-          newItemPrice = buffLowerDelimiter;
-        } else if (leastWaxPrice <= buffUpperDelimiter) {
-          newItemPrice = leastWaxPrice - 0.001;
-        } else {
-          newItemPrice = buffUpperDelimiter;
+  // Create an array of Promises by mapping over the items and calling actLLAsync
+  const promises = myListedItems && myListedItems.map(async item => {
+    try {
+      var res = await axios.get(
+        WAX_BASE_URL + "/search-items-by-name",
+        {
+          params: {
+            api: waxPeerApiKey,
+            game: "csgo",
+            names: item.name,
+          },
         }
-        updates.push(
-          {
-            "item_id": item.item_id,
-            "name": item.name,
-            "old_price": item.price,
-            "price": newItemPrice * 1000,
-            "least": leastWaxPrice,
+      );
+      if (res.status === 200) {
+        var itemName = item.name;
+        var returnedItems = res.data.items;
+        var listedItemPriceInDollars = item.price / 1000.0;
+        var leastWaxPrice = await findLeastWaxPrice(returnedItems);
+
+        if (leastWaxPrice < listedItemPriceInDollars) {
+          var buffLowerDelimiter = await getLowerDelimiter(itemName);
+          var buffUpperDelimiter = await getUpperDelimiter(itemName);
+          if (leastWaxPrice < buffLowerDelimiter) {
+            newItemPrice = buffLowerDelimiter;
+          } else if (leastWaxPrice <= buffUpperDelimiter) {
+            newItemPrice = leastWaxPrice - 0.001;
+          } else {
+            newItemPrice = buffUpperDelimiter;
           }
-        );
+          updates.push(
+            {
+              "item_id": item.item_id,
+              "name": item.name,
+              "old_price": item.price,
+              "price": newItemPrice * 1000,
+              "least": leastWaxPrice,
+            }
+          );
+        }
       }
-    }
-  }
+    } catch { }
+  });
+
+  await Promise.all(promises);
 
   if (updates.length > 0) {
-
     console.log(`Preparing new row of updates (${updates.length} detected)`);
     var batches = [];
     var full = Math.floor(updates.length / waxUpdateLimit);
     var rem = (updates.length) % waxUpdateLimit;
 
     for (var i = 0; i < full; i++) {
-      batches.push(updates.slice(i * waxUpdateLimit, (i + waxUpdateLimit) * waxUpdateLimit));
+      batches.push(updates.slice(i * waxUpdateLimit, (i + 1) * waxUpdateLimit));
     }
 
     if (rem > 0) {
@@ -341,41 +359,62 @@ async function updateMyItems() {
 
     var updated = [];
     var failed = [];
-
+    
     for (var idx = 0; idx < batches.length; idx++) {
-      log(`Sending batch of updates ${idx + 1} out of ${batches.length}`)
+      console.log(`Sending batch of updates ${idx + 1} out of ${batches.length}`)
       var sendItems = batches[idx].map(element => ({
         item_id: element.item_id,
         price: Math.floor(element.price),
       }))
-     // c/onsole.log(sendItems);
-      res = await axios.post(
-        WAX_BASE_URL + "/edit-items",
-        {
-          "items": sendItems
-        }, {
-        params: {
-          "api": waxPeerApiKey,
-          "game": "csgo",
-        }
-      });
+      try {
+        res = await axios.post(
+          WAX_BASE_URL + "/edit-items",
+          {
+            "items": sendItems
+          }, {
+          params: {
+            "api": waxPeerApiKey,
+            "game": "csgo",
+          }
+        });
+      } catch (error) {
+        console.log(error)
+      }
+
+      delayCountForUpdate += 1;
       if (res.status !== 200) {
         error();
         continue;
       }
-
       result = res.data;
-      //console.log(result);
       updated = [...updated, ...result.updated];
       failed = [...failed, ...result.failed];
-      setTimeout(() => { }, secondsBetweenWaxRequest*1000); // 1000 milliseconds = 1 second
+
+      //console.log(result.updated.length, result.failed.length);
+      if (result.failed.length > 0) { console.log(result.failed[0].msg) }
+
+      if (delayCountForUpdate == 2) {//because of wax policy to protect spam, we shoue delay 120 seconds per 2 requests
+        delayCountForUpdate = 0;
+        var setTime = Date.now()
+        while (true) {
+          if (Date.now() - setTime > 120 * 1000) break;
+        }
+      } else {
+        var setTime = Date.now()
+        while (true) {
+          if (Date.now() - setTime > 2 * 1000) break;
+        }
+      }
     }
 
     if (updated.length > 0) {
       console.log(`   Success: ${updated.length}`);
-      updates.forEach(update => {
-        console.log(`      item id is ${update.item_id} and price is  ${update.price / 1000}`)
-      });
+      if (showResultDetail) {
+        updates.forEach(update => {
+          console.log(`      item id is ${update.item_id} and price is  ${update.price / 1000}`)
+        });
+      }
+
     } else {
       console.log("   No success")
     }
@@ -396,14 +435,9 @@ async function updateMyItems() {
 async function main() {
   await loadConfig();
   while (true) {
-    try {
-      await loadPriceMPIREInfo();
-      await listMyItems();
-      await updateMyItems();
-    } catch {
-      continue;
-    }
-
+    await loadPriceMPIREInfo();
+    await listMyItems();
+    await updateMyItems();
   }
 }
 
