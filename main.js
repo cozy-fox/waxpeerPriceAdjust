@@ -435,13 +435,13 @@ async function updateMyItems() {
 async function main() {
   await loadConfig();
   while (true) {
-    try {
+     try {
       await loadPriceMPIREInfo();
       await listMyItems();
       await updateMyItems();
-    } catch { 
-      continue; 
-    }
+     } catch { 
+       continue; 
+     }
 
   }
 }

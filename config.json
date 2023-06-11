@@ -1,17 +1,17 @@
 {
     "pricempire_api_key": "7443d393-ca4c-473a-8be8-1a25416b262d",
-    "waxpeer_api_key": "5211d1a2677d1596fdafd8da242a1e821628a5bbcc9ea3521cedc04501fa59cf",
-    "default_delimiter": [1.08,1.5],
+    "waxpeer_api_key": "0c69eefccb83414ed49ce2ed3c7c50a8d6672b63915aabdb167ede0bdf58256f",
+    "default_delimiter": [1.16,1.5],
     "detailed_delimiter":[
         {
             "range":[0,20],
-            "delimiter":[1.15,1.4]
+            "delimiter":[1.2,1.4]
         },{
-            "range":[20,200],
-            "delimiter":[1.1,1.5]
+            "range":[20,500],
+            "delimiter":[1.16,1.5]
         },{
-            "range":[200,1500],
-            "delimiter":[1.05,1.2]
+            "range":[500,150000],
+            "delimiter":[1.14,1.35]
         }
     ],
     "max_items_per_listing": 90,
