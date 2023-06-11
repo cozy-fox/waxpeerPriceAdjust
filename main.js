@@ -27,7 +27,7 @@ var lastWaxListingUpdate = Date.now();
 var lastPriceMPIREUpdate = Date.now();
 var lastWaxNewListing = Date.now();
 var items = [];
-sharedVariable = {}
+var itemIdNamePair = {};
 
 function error() {
   console.log(
@@ -301,6 +301,7 @@ async function updateMyItems() {
   // Create an array of Promises by mapping over the items and calling actLLAsync
   const promises = myListedItems && myListedItems.map(async item => {
     try {
+      itemIdNamePair[item.item_id]=item.name;
       var res = await axios.get(
         WAX_BASE_URL + "/search-items-by-name",
         {
@@ -411,7 +412,7 @@ async function updateMyItems() {
       console.log(`   Success: ${updated.length}`);
       if (showResultDetail) {
         updates.forEach(update => {
-          console.log(`      item id is ${update.item_id} and price is  ${update.price / 1000}`)
+          console.log(`      item id is ${itemIdNamePair[update.item_id]} and price is  ${update.price / 1000}`)
         });
       }
 
