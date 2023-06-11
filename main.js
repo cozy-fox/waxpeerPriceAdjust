@@ -248,12 +248,12 @@ async function listMyItems() {
       },
     });
     delayCountForList++;
-    if(delayCountForList==2){
-      delayCountForList=0;
+    if (delayCountForList == 2) {
+      delayCountForList = 0;
       var setTime = Date.now()
-        while (true) {
-          if (Date.now() - setTime > 120 * 1000) break;
-        }
+      while (true) {
+        if (Date.now() - setTime > 120 * 1000) break;
+      }
     }
   }
 
@@ -359,7 +359,7 @@ async function updateMyItems() {
 
     var updated = [];
     var failed = [];
-    
+
     for (var idx = 0; idx < batches.length; idx++) {
       console.log(`Sending batch of updates ${idx + 1} out of ${batches.length}`)
       var sendItems = batches[idx].map(element => ({
@@ -435,9 +435,14 @@ async function updateMyItems() {
 async function main() {
   await loadConfig();
   while (true) {
-    await loadPriceMPIREInfo();
-    await listMyItems();
-    await updateMyItems();
+    try {
+      await loadPriceMPIREInfo();
+      await listMyItems();
+      await updateMyItems();
+    } catch { 
+      continue; 
+    }
+
   }
 }
 
