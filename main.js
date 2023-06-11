@@ -15,6 +15,8 @@ var maxItemsPerListing = -1;
 var secondsBetweenWaxListingsUpdates = 60;
 var hoursBetweenPriceMPIREPriceUpdate = 6.0;
 var hoursBetweenWaxNewListing = 6.0;
+var secondsBetweenWaxRequest=5.0;
+var waxUpdateLimit=50;
 var detailedDelimiter = [];
 
 var priceMPIREItemData = {};
@@ -23,7 +25,7 @@ var waxCache = {};
 var lastWaxListingUpdate = Date.now();
 var lastPriceMPIREUpdate = Date.now();
 var lastWaxNewListing = Date.now();
-var items = []
+var items = [];
 sharedVariable = {}
 
 function error() {
@@ -43,7 +45,9 @@ async function loadConfig() {
   priceLowerDelimiter = config.default_delimiter[0];
   priceUpperDelimiter = config.default_delimiter[1];
   maxItemsPerListing = config.max_items_per_listing;
+  secondsBetweenWaxRequest=config.seconds_between_wax_request;
   detailedDelimiter = config.detailed_delimiter;
+  waxUpdateLimit=config.wax_update_limit;
   secondsBetweenWaxListingsUpdates = config.seconds_between_wax_listings_updates;
   hoursBetweenPriceMPIREPriceUpdate = config.hours_between_pricempire_price_update;
   hoursBetweenWaxNewListing = config.hours_between_wax_new_listing;
@@ -324,15 +328,15 @@ async function updateMyItems() {
 
     console.log(`Preparing new row of updates (${updates.length} detected)`);
     var batches = [];
-    var full = Math.floor(updates.length / 50);
-    var rem = (updates.length) % 50;
+    var full = Math.floor(updates.length / waxUpdateLimit);
+    var rem = (updates.length) % waxUpdateLimit;
 
     for (var i = 0; i < full; i++) {
-      batches.push(updates.slice(i * 50, (i + 1) * 50));
+      batches.push(updates.slice(i * waxUpdateLimit, (i + waxUpdateLimit) * waxUpdateLimit));
     }
 
     if (rem > 0) {
-      batches.push(updates.slice(full * 50),);
+      batches.push(updates.slice(full * waxUpdateLimit),);
     }
 
     var updated = [];
@@ -344,6 +348,7 @@ async function updateMyItems() {
         item_id: element.item_id,
         price: Math.floor(element.price),
       }))
+     // c/onsole.log(sendItems);
       res = await axios.post(
         WAX_BASE_URL + "/edit-items",
         {
@@ -360,29 +365,31 @@ async function updateMyItems() {
       }
 
       result = res.data;
+      //console.log(result);
       updated = [...updated, ...result.updated];
       failed = [...failed, ...result.failed];
-      setTimeout(() => { }, 1000); // 1000 milliseconds = 1 second
+      setTimeout(() => { }, secondsBetweenWaxRequest*1000); // 1000 milliseconds = 1 second
     }
 
     if (updated.length > 0) {
-      console.log("   Successful updates:")
+      console.log(`   Success: ${updated.length}`);
       updates.forEach(update => {
-        console.log(`   item id is ${update.item_id} and price is  ${update.price / 1000}`)
+        console.log(`      item id is ${update.item_id} and price is  ${update.price / 1000}`)
       });
     } else {
-      console.log("  No successful updates.")
+      console.log("   No success")
     }
 
     if (failed.length > 0) {
-      console.log("   Failed Updates");
+      console.log(`   Failed: ${failed.length}`);
+      console.log(`      ${failed[0].msg}`)
     }
     else {
-      console.log("   No failed updates");
+      console.log("   No failed");
     }
   }
   else {
-    console.log("   No updates to be applied");
+    console.log("   ***No updates***");
   }
 }
 

@@ -15,6 +15,8 @@
         }
     ],
     "max_items_per_listing": -1,
+    "seconds_between_wax_request":5,
+    "wax_update_limit":50,
     "seconds_between_wax_listings_updates": 60,
     "hours_between_pricempire_price_update": 6.0,
     "hours_between_wax_new_listing": 6.0
